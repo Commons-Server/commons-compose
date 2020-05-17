@@ -1,0 +1,101 @@
+version: '3.1'
+
+services:
+
+# Watchtower will poll the registrys for changed images https://hub.docker.com/r/v2tec/watchtower/
+#
+# Linking to docker sock and credentals is likely a bad practice
+#
+# If a repository is set up to automatically build docker images on merged PRs watchtower would automatically pull in changes. It would
+# be wise to restict permissions on master to ensure unautorised code is deployed. An example of an automated build process utilizing free
+# github tools is available at https://github.com/rogue-hack-lab/hackbot/blob/master/.github/workflows/dockerimage.yml
+#
+# --label-enable Watch containers where the com.centurylinklabs.watchtower.enable label is set to true
+
+  watchtower:
+    container_name: watchtower
+    image: v2tec/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /root/.docker/config.json:/config.json
+    command: --label-enable --cleanup
+    labels:
+      - "traefik.enable=false"
+      - com.centurylinklabs.watchtower.enable=true
+    environment:
+      - WATCHTOWER_NOTIFICATIONS=slack
+      - WATCHTOWER_NOTIFICATION_SLACK_HOOK_URL=https://hooks.slack.com/services/TCECV/BEBJX/x6klfa9I9R5Ey00
+      - WATCHTOWER_NOTIFICATION_SLACK_IDENTIFIER=proxy.c2.com
+
+# Traefik is a reverse proxy similar to nginx but will mange LE certs
+#
+# On inital setup you need to do the following in the host OS so ssl will work:
+# touch acme.json
+# chmod 600 acme.json 
+#
+# Again linking the the sock is likely poor practice but provides automatic discovery based on other containers labels
+
+  traefik:
+    container_name: traefik
+    image: traefik:latest
+    command:
+      - --entrypoints.http.address=:80
+      - --entrypoints.https.address=:443
+      - --providers.docker
+      - --api
+      - --certificatesresolvers.le.acme.email=ward@c2.com
+      - --certificatesresolvers.le.acme.storage=/acme.json
+      - --certificatesresolvers.le.acme.tlschallenge=true
+      - --metrics.prometheus.buckets=0.100000, 0.300000, 1.200000, 5.000000
+      - --metrics.prometheus.addEntryPointsLabels=true
+      - --metrics.prometheus.addServicesLabels=true
+      - --entryPoints.metrics.address=:8082
+      - --metrics.prometheus.entryPoint=metrics
+    ports:
+      - 80:80
+      - 443:443
+      - 8082:8082
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /root/acme.json:/acme.json
+    labels:
+      - "traefik.enable=true"
+#      - "traefik.http.routers.api.rule=Host(`monitor.docked.ward.wiki`)"
+#      - "traefik.http.routers.api.entrypoints=https"
+#      - "traefik.http.routers.api.service=api@internal"
+#      - "traefik.http.routers.api.middlewares=auth"
+#      - "traefik.http.routers.api.tls=true"
+#      - "traefik.http.routers.api.tls.certresolver=le"
+      # generate password with `htpasswd -nb username password`
+      # admin:docked & escape $ with $$ 
+#      - "traefik.http.middlewares.auth.basicauth.users=admin:$$apr1$$4CmoxIGm$$6PMOmo1IdGRskr7.9arHU/"
+      # middleware redirect
+      #      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      # global redirect to https
+      #      - "traefik.http.routers.redirs.rule=hostregexp(`{host:.+}`)"
+      #      - "traefik.http.routers.redirs.entrypoints=http"
+      #      - "traefik.http.routers.redirs.middlewares=redirect-to-https"
+      - com.centurylinklabs.watchtower.enable=true
+    restart: always
+
+  farm:
+    container_name: farm
+    image: 'dobbs/farm'
+    environment:
+      - SAMPLE_ENV=sample
+    restart: always
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.farm.rule=Host(`docked.ward.wiki`)"
+      - "traefik.http.routers.farm.entrypoints=https"
+      - "traefik.http.routers.farm.tls"
+      - "traefik.http.routers.farm.tls.certresolver=le"
+      - "traefik.http.services.farm.loadbalancer.server.port=3000"
+
+
+
+
+        
+volumes:
+  wiki-sites:
