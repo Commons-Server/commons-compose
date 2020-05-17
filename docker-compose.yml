@@ -87,13 +87,28 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=proxy"
-      - "traefik.http.routers.farm.rule=Host(`docked.ward.wiki`)"
+      - "traefik.http.routers.farm.rule=Host(`docked.ward.wiki`,`wiki.robert.best`)"
       - "traefik.http.routers.farm.entrypoints=https"
       - "traefik.http.routers.farm.tls"
       - "traefik.http.routers.farm.tls.certresolver=le"
       - "traefik.http.services.farm.loadbalancer.server.port=3000"
 
 
+  sample:
+    container_name: sample
+    image: 'nginxdemos/hello'
+    expose:
+      - '80'
+    environment:
+      - SAMPLE_ENV=sample
+    restart: always
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.sample.rule=Host(`sample.robert.best`, `sample.psu-capstone.c2.com`)"
+      - "traefik.http.routers.sample.entrypoints=https"
+      - "traefik.http.routers.sample.tls"
+      - "traefik.http.routers.sample.tls.certresolver=le"
 
 
         
